@@ -1,76 +1,176 @@
-const { defineConfig, loadEnv } = require("@medusajs/utils")
+import { loadEnv, Modules, defineConfig } from '@medusajs/utils';
+import {
+  ADMIN_CORS,
+  AUTH_CORS,
+  BACKEND_URL,
+  COOKIE_SECRET,
+  DATABASE_URL,
+  JWT_SECRET,
+  REDIS_URL,
+  RESEND_API_KEY,
+  RESEND_FROM_EMAIL,
+  SENDGRID_API_KEY,
+  SENDGRID_FROM_EMAIL,
+  SHOULD_DISABLE_ADMIN,
+  STORE_CORS,
+  STRIPE_API_KEY,
+  STRIPE_WEBHOOK_SECRET,
+  WORKER_MODE,
+  MINIO_ENDPOINT,
+  MINIO_ACCESS_KEY,
+  MINIO_SECRET_KEY,
+  MINIO_BUCKET,
+  MEILISEARCH_HOST,
+  MEILISEARCH_ADMIN_KEY
+} from 'lib/constants';
 
-loadEnv(process.env.NODE_ENV || "development", process.cwd())
+// 加载环境变量
+loadEnv(process.env.NODE_ENV, process.cwd());
 
-// CORS when consuming Medusa from admin
-// Medusa's docs are added for a better learning experience. Feel free to remove.
-const ADMIN_CORS = `${
-  process.env.ADMIN_CORS?.length
-    ? `${process.env.ADMIN_CORS},`
-    : "http://localhost:7000,http://localhost:7001,"
-}https://docs.medusajs.com,https://medusa-docs-v2-git-docs-v2-medusajs.vercel.app,https://medusa-resources-git-docs-v2-medusajs.vercel.app`
+// 💡 核心修正：确保后端 URL 和跨域地址在构建时被正确注入
+const finalBackendUrl = process.env.BACKEND_URL || BACKEND_URL;
+const finalAdminCors = process.env.ADMIN_CORS || ADMIN_CORS;
+const finalAuthCors = process.env.AUTH_CORS || AUTH_CORS;
 
-// CORS to avoid issues when consuming Medusa from a client
-// Medusa's docs are added for a better learning experience. Feel free to remove.
-const STORE_CORS = `${
-  process.env.STORE_CORS?.length
-    ? `${process.env.STORE_CORS},`
-    : "http://localhost:8000,"
-}https://docs.medusajs.com,https://medusa-docs-v2-git-docs-v2-medusajs.vercel.app,https://medusa-resources-git-docs-v2-medusajs.vercel.app`
-
-const DATABASE_URL =
-  process.env.DATABASE_URL || "postgres://medusa:password@localhost/medusa"
-
-const REDIS_URL = process.env.REDIS_URL || "redis://localhost:6379"
-
-export default defineConfig({
-  plugins: [
-    `medusa-fulfillment-manual`,
-    `medusa-payment-manual`,
+const medusaConfig = {
+  projectConfig: {
+    databaseUrl: DATABASE_URL,
+    databaseLogging: false,
+    redisUrl: REDIS_URL,
+    workerMode: WORKER_MODE,
+    http: {
+      adminCors: finalAdminCors,
+      authCors: finalAuthCors,
+      storeCors: process.env.STORE_CORS || STORE_CORS,
+      jwtSecret: JWT_SECRET,
+      cookieSecret: COOKIE_SECRET
+    },
+    // 强制指定构建选项
+    build: {
+      rollupOptions: {
+        external: ["@medusajs/dashboard", "@medusajs/admin-shared"]
+      }
+    }
+  },
+  admin: {
+    // 💡 核心修正：解决 Admin 找不到 index.html 的关键配置
+    backendUrl: finalBackendUrl,
+    path: "/admin",
+    outDir: "./.medusa/server/public/admin", 
+    disable: process.env.SHOULD_DISABLE_ADMIN === "true" || SHOULD_DISABLE_ADMIN,
+  },
+  modules: [
+    // 文件服务模块 (MinIO 或 本地)
     {
-      resolve: `@medusajs/file-local`,
+      key: Modules.FILE,
+      resolve: '@medusajs/file',
       options: {
-        upload_dir: "uploads",
-      },
+        providers: [
+          ...(MINIO_ENDPOINT && MINIO_ACCESS_KEY && MINIO_SECRET_KEY ? [{
+            resolve: './src/modules/minio-file',
+            id: 'minio',
+            options: {
+              endPoint: MINIO_ENDPOINT,
+              accessKey: MINIO_ACCESS_KEY,
+              secretKey: MINIO_SECRET_KEY,
+              bucket: MINIO_BUCKET
+            }
+          }] : [{
+            resolve: '@medusajs/file-local',
+            id: 'local',
+            options: {
+              upload_dir: 'static',
+              backend_url: `${finalBackendUrl}/static`
+            }
+          }])
+        ]
+      }
+    },
+    // Redis 事件总线与工作流引擎
+    ...(REDIS_URL ? [{
+      key: Modules.EVENT_BUS,
+      resolve: '@medusajs/event-bus-redis',
+      options: {
+        redisUrl: REDIS_URL
+      }
     },
     {
-      resolve: `medusa-plugin-meilisearch`,
+      key: Modules.WORKFLOW_ENGINE,
+      resolve: '@medusajs/workflow-engine-redis',
+      options: {
+        redis: {
+          url: REDIS_URL,
+        }
+      }
+    }] : []),
+    // 通知模块 (SendGrid 或 Resend)
+    ...( (SENDGRID_API_KEY && SENDGRID_FROM_EMAIL) || (RESEND_API_KEY && RESEND_FROM_EMAIL) ? [{
+      key: Modules.NOTIFICATION,
+      resolve: '@medusajs/notification',
+      options: {
+        providers: [
+          ...(SENDGRID_API_KEY && SENDGRID_FROM_EMAIL ? [{
+            resolve: '@medusajs/notification-sendgrid',
+            id: 'sendgrid',
+            options: {
+              channels: ['email'],
+              api_key: SENDGRID_API_KEY,
+              from: SENDGRID_FROM_EMAIL,
+            }
+          }] : []),
+          ...(RESEND_API_KEY && RESEND_FROM_EMAIL ? [{
+            resolve: './src/modules/email-notifications',
+            id: 'resend',
+            options: {
+              channels: ['email'],
+              api_key: RESEND_API_KEY,
+              from: RESEND_FROM_EMAIL,
+            },
+          }] : []),
+        ]
+      }
+    }] : []),
+    // 支付模块 (Stripe)
+    ...(STRIPE_API_KEY && STRIPE_WEBHOOK_SECRET ? [{
+      key: Modules.PAYMENT,
+      resolve: '@medusajs/payment',
+      options: {
+        providers: [
+          {
+            resolve: '@medusajs/payment-stripe',
+            id: 'stripe',
+            options: {
+              apiKey: STRIPE_API_KEY,
+              webhookSecret: STRIPE_WEBHOOK_SECRET,
+            },
+          },
+        ],
+      },
+    }] : [])
+  ],
+  plugins: [
+    // 搜索模块 (Meilisearch)
+    ...(MEILISEARCH_HOST && MEILISEARCH_ADMIN_KEY ? [{
+      resolve: '@rokmohar/medusa-plugin-meilisearch',
       options: {
         config: {
-          host: process.env.MEILISEARCH_HOST,
-          apiKey: process.env.MEILISEARCH_API_KEY,
+          host: MEILISEARCH_HOST,
+          apiKey: MEILISEARCH_ADMIN_KEY
         },
         settings: {
           products: {
             indexSettings: {
-              searchableAttributes: ["title", "description", "variant_sku"],
-              displayedAttributes: [
-                "id",
-                "title",
-                "description",
-                "variant_sku",
-                "thumbnail",
-                "handle",
-              ],
+              searchableAttributes: ['title', 'description', 'variant_sku'],
+              filterableAttributes: ['id', 'handle'],
             },
-            primaryKey: "id",
-          },
-        },
-      },
-    },
-  ],
-  admin: {
-    backendUrl: "http://localhost:9000",
-  },
-  projectConfig: {
-    databaseUrl: DATABASE_URL,
-    http: {
-      storeCors: STORE_CORS,
-      adminCors: ADMIN_CORS,
-      authCors: process.env.AUTH_CORS || ADMIN_CORS,
-      jwtSecret: process.env.JWT_SECRET || "supersecret",
-      cookieSecret: process.env.COOKIE_SECRET || "supersecret",
-    },
-    redisUrl: REDIS_URL,
-  },
-})
+            primaryKey: 'id',
+          }
+        }
+      }
+    }] : [])
+  ]
+};
+
+console.log("Railway Config: Backend URL set to", finalBackendUrl);
+
+export default defineConfig(medusaConfig);
