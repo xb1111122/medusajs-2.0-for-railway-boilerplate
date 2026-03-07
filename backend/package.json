@@ -13,7 +13,7 @@
     "medusa"
   ],
   "scripts": {
-  "build": "medusa build --admin-only"
+  "build": "medusa build"
   }
   "dependencies": {
     "@medusajs/admin-sdk": "2.12.1",
