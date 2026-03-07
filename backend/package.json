@@ -13,8 +13,10 @@
     "medusa"
   ],
   "scripts": {
-  "build": "medusa build"
-  }
+    "build": "medusa build",
+    "start": "medusa start",
+    "dev": "medusa dev"
+  },
   "dependencies": {
     "@medusajs/admin-sdk": "2.12.1",
     "@medusajs/admin-shared": "2.12.1",
@@ -53,7 +55,6 @@
   },
   "packageManager": "pnpm@9.10.0",
   "engines": {
-    "node": "22.x",
-    "npm": "10.x"
+    "node": "22.x"
   }
 }
