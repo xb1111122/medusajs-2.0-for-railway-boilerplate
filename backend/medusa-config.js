@@ -26,14 +26,17 @@ import {
 
 loadEnv(process.env.NODE_ENV, process.cwd());
 
-// 1. 在文件顶部引入 constants 之后，立即定义一个明确的变量
+// 💡 重点：在导出之前定义好变量，防止构建工具报错
 const finalBackendUrl = process.env.BACKEND_URL || BACKEND_URL;
 const finalAdminCors = process.env.ADMIN_CORS || ADMIN_CORS;
 const finalAuthCors = process.env.AUTH_CORS || AUTH_CORS;
 
 const medusaConfig = {
   projectConfig: {
-    // ... 其他保持不变
+    databaseUrl: DATABASE_URL,
+    databaseLogging: false,
+    redisUrl: REDIS_URL,
+    workerMode: WORKER_MODE,
     http: {
       adminCors: finalAdminCors,
       authCors: finalAuthCors,
@@ -41,14 +44,16 @@ const medusaConfig = {
       jwtSecret: JWT_SECRET,
       cookieSecret: COOKIE_SECRET
     },
+    build: {
+      rollupOptions: {
+        external: ["@medusajs/dashboard", "@medusajs/admin-shared"]
+      }
+    }
   },
   admin: {
-    // 2. 这里直接使用刚才定义的变量，不要在属性后面写 || 逻辑
     backendUrl: finalBackendUrl,
-    disable: SHOULD_DISABLE_ADMIN,
+    disable: process.env.SHOULD_DISABLE_ADMIN === "true" || SHOULD_DISABLE_ADMIN,
   },
-  // ... 其他部分
-}
   modules: [
     {
       key: Modules.FILE,
@@ -62,14 +67,14 @@ const medusaConfig = {
               endPoint: MINIO_ENDPOINT,
               accessKey: MINIO_ACCESS_KEY,
               secretKey: MINIO_SECRET_KEY,
-              bucket: MINIO_BUCKET // Optional, default: medusa-media
+              bucket: MINIO_BUCKET
             }
           }] : [{
             resolve: '@medusajs/file-local',
             id: 'local',
             options: {
               upload_dir: 'static',
-              backend_url: `${BACKEND_URL}/static`
+              backend_url: `${finalBackendUrl}/static`
             }
           }])
         ]
@@ -160,5 +165,5 @@ const medusaConfig = {
   ]
 };
 
-console.log(JSON.stringify(medusaConfig, null, 2));
+console.log("Config loaded with Backend URL:", finalBackendUrl);
 export default defineConfig(medusaConfig);
