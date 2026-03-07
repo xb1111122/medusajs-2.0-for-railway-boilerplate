@@ -33,12 +33,16 @@ const medusaConfig = {
     redisUrl: REDIS_URL,
     workerMode: WORKER_MODE,
     http: {
-      adminCors: ADMIN_CORS,
-      authCors: AUTH_CORS,
-      storeCors: STORE_CORS,
+      // 重点：确保这些变量在 lib/constants 里不是死代码
+      // 建议改为直接读取，防止常量失效
+      adminCors: process.env.ADMIN_CORS || ADMIN_CORS,
+      authCors: process.env.AUTH_CORS || AUTH_CORS,
+      storeCors: process.env.STORE_CORS || STORE_CORS,
       jwtSecret: JWT_SECRET,
       cookieSecret: COOKIE_SECRET
     },
+    // ...
+  },
     build: {
       rollupOptions: {
         external: ["@medusajs/dashboard", "@medusajs/admin-shared"]
@@ -46,9 +50,9 @@ const medusaConfig = {
     }
   },
   admin: {
-    // 强制直接读取环境变量，不给 localhost 留机会
+    // 如果 BACKEND_URL 在构建时变成了 localhost:9000，后台就废了
     backendUrl: process.env.BACKEND_URL || BACKEND_URL, 
-    disable: process.env.SHOULD_DISABLE_ADMIN === "true",
+    disable: SHOULD_DISABLE_ADMIN,
   },
   modules: [
     {
