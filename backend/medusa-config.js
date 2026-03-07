@@ -26,34 +26,29 @@ import {
 
 loadEnv(process.env.NODE_ENV, process.cwd());
 
+// 1. 在文件顶部引入 constants 之后，立即定义一个明确的变量
+const finalBackendUrl = process.env.BACKEND_URL || BACKEND_URL;
+const finalAdminCors = process.env.ADMIN_CORS || ADMIN_CORS;
+const finalAuthCors = process.env.AUTH_CORS || AUTH_CORS;
+
 const medusaConfig = {
   projectConfig: {
-    databaseUrl: DATABASE_URL,
-    databaseLogging: false,
-    redisUrl: REDIS_URL,
-    workerMode: WORKER_MODE,
+    // ... 其他保持不变
     http: {
-      // 重点：确保这些变量在 lib/constants 里不是死代码
-      // 建议改为直接读取，防止常量失效
-      adminCors: process.env.ADMIN_CORS || ADMIN_CORS,
-      authCors: process.env.AUTH_CORS || AUTH_CORS,
+      adminCors: finalAdminCors,
+      authCors: finalAuthCors,
       storeCors: process.env.STORE_CORS || STORE_CORS,
       jwtSecret: JWT_SECRET,
       cookieSecret: COOKIE_SECRET
     },
-    // ...
-  },
-    build: {
-      rollupOptions: {
-        external: ["@medusajs/dashboard", "@medusajs/admin-shared"]
-      }
-    }
   },
   admin: {
-    // 如果 BACKEND_URL 在构建时变成了 localhost:9000，后台就废了
-    backendUrl: process.env.BACKEND_URL || BACKEND_URL, 
+    // 2. 这里直接使用刚才定义的变量，不要在属性后面写 || 逻辑
+    backendUrl: finalBackendUrl,
     disable: SHOULD_DISABLE_ADMIN,
   },
+  // ... 其他部分
+}
   modules: [
     {
       key: Modules.FILE,
