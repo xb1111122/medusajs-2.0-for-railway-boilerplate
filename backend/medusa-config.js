@@ -45,9 +45,10 @@ const medusaConfig = {
       }
     }
   },
-  admin: {
-    backendUrl: BACKEND_URL,
-    disable: SHOULD_DISABLE_ADMIN,
+admin: {
+    // 优先读取环境变量，如果没有才使用常量里的值
+    backendUrl: process.env.BACKEND_URL || BACKEND_URL,
+    disable: process.env.SHOULD_DISABLE_ADMIN === "true" || SHOULD_DISABLE_ADMIN,
   },
   modules: [
     {
